@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.24)
 project(cugpt LANGUAGES CXX CUDA)
 
+if (MSVC)
+    add_compile_options(
+        $<$<COMPILE_LANGUAGE:CXX>:/experimental:deterministic>
+        $<$<COMPILE_LANGUAGE:CXX>:/pathmap:${CMAKE_CURRENT_SOURCE_DIR}=.>
+
+        $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/experimental:deterministic>
+        $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/pathmap:${CMAKE_CURRENT_SOURCE_DIR}=.>
+    )
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 17)
