@@ -12,16 +12,6 @@
 using namespace cugpt::core;
 using namespace cugpt::nn;
 
-namespace
-{
-    std::vector<float> copyTensor(const Tensor &tensor, CudaContext &ctx)
-    {
-        std::vector<float> host(tensor.numel());
-        tensor.copyToHost(host.data(), ctx);
-        return host;
-    }
-} // namespace
-
 int main()
 {
     CudaContext ctx;
@@ -88,6 +78,7 @@ int main()
     input.copyFromHost(x.data(), ctx);
     gradOutput.copyFromHost(gy.data(), ctx);
 
+    ffn.zeroGrad(ctx);
     ffn.forward(input, output);
     ctx.synchronize();
 
@@ -103,5 +94,5 @@ int main()
     expectNear(copyTensor(ffn.secondLinear().bias()->grad, ctx), grad_b2_ref, 1e-5f, "db2");
 
     std::cout << "feed_forward: OK\n";
-    return EXIT_SUCCESS;
+    return 0;
 }

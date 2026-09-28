@@ -1,10 +1,14 @@
 #pragma once
 
+#include "core/tensor.cuh"
+
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
+
+using namespace cugpt::core;
 
 inline void expectNear(const std::vector<float> &actual,
                        const std::vector<float> &expected,
@@ -29,4 +33,18 @@ inline void expectNear(const std::vector<float> &actual,
         std::cerr << name << ": tolerance exceeded\n";
         std::exit(EXIT_FAILURE);
     }
+}
+
+inline std::vector<float> copyTensor(const Tensor &tensor, CudaContext &ctx)
+{
+    std::vector<float> host(tensor.numel());
+    tensor.copyToHost(host.data(), ctx);
+    return host;
+}
+
+inline std::vector<int32_t> copyTensor(const IntTensor &tensor, CudaContext &ctx)
+{
+    std::vector<int32_t> host(tensor.numel());
+    tensor.copyToHost(host.data(), ctx);
+    return host;
 }

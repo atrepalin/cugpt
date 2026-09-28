@@ -15,11 +15,36 @@ int main()
 {
     CudaContext ctx;
 
-    Linear layer(ctx, 3, 2, true);
-    const std::vector<float> w = {1, 2, 3, 4, 5, 6};
+    const std::vector<float> w = {
+        1, 2,
+        3, 4,
+        5, 6};
     const std::vector<float> b = {0.5f, -1.0f};
-    const std::vector<float> x = {1, 2, 3, 4, 5, 6};
-    const std::vector<float> gy = {0.5f, 1.0f, -2.0f, 3.0f};
+
+    const std::vector<float> x = {
+        1, 2, 3,
+        4, 5, 6};
+
+    const std::vector<float> gy = {
+        0.5f, 1.0f,
+        -2.0f, 3.0f};
+
+    const std::vector<float> output_ref = {
+        22.5f, 27.0f,
+        49.5f, 63.0f};
+
+    const std::vector<float> grad_x_ref = {
+        2.5f, 5.5f, 8.5f,
+        4.0f, 6.0f, 8.0f};
+
+    const std::vector<float> grad_w_ref = {
+        -7.5f, 13.0f,
+        -9.0f, 17.0f,
+        -10.5f, 21.0f};
+
+    const std::vector<float> grad_b_ref = {-1.5f, 4.0f};
+
+    Linear layer(ctx, 3, 2, true);
 
     layer.weights.data.copyFromHost(w.data(), ctx);
     layer.bias()->data.copyFromHost(b.data(), ctx);
@@ -35,22 +60,15 @@ int main()
     layer.forward(tx, ty);
     ctx.synchronize();
 
-    std::vector<float> y(4);
-    ty.copyToHost(y.data(), ctx);
-    expectNear(y, {22.5f, 27.0f, 49.5f, 63.0f}, 1e-5f, "forward");
+    expectNear(copyTensor(ty, ctx), output_ref, 1e-5f, "forward");
 
     layer.zeroGrad(ctx);
     layer.backward(tgy, tgx);
     ctx.synchronize();
 
-    std::vector<float> gx(6), gw(6), gb(2);
-    tgx.copyToHost(gx.data(), ctx);
-    layer.weights.grad.copyToHost(gw.data(), ctx);
-    layer.bias()->grad.copyToHost(gb.data(), ctx);
-
-    expectNear(gx, {2.5f, 5.5f, 8.5f, 4.0f, 6.0f, 8.0f}, 1e-5f, "dX");
-    expectNear(gw, {-7.5f, 13.0f, -9.0f, 17.0f, -10.5f, 21.0f}, 1e-5f, "dW");
-    expectNear(gb, {-1.5f, 4.0f}, 1e-5f, "db");
+    expectNear(copyTensor(tgx, ctx), grad_x_ref, 1e-5f, "dX");
+    expectNear(copyTensor(layer.weights.grad, ctx), grad_w_ref, 1e-5f, "dW");
+    expectNear(copyTensor(layer.bias()->grad, ctx), grad_b_ref, 1e-5f, "db");
 
     std::cout << "linear: OK\n";
     return 0;

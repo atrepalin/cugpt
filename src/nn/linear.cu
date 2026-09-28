@@ -54,7 +54,9 @@ namespace cugpt::nn
     } // namespace
 
     Linear::Linear(CudaContext &ctx, std::size_t in_features, std::size_t out_features, bool include_bias)
-        : ctx_(&ctx), input_features_(in_features), output_features_(out_features),
+        : ctx_(&ctx),
+          input_features_(in_features),
+          output_features_(out_features),
           weights(Shape{in_features, out_features})
     {
         if (in_features <= 0 || out_features <= 0)
