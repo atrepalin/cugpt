@@ -57,3 +57,24 @@ target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJECT_NAME}_core)
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
 )
+
+enable_testing()
+
+file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cu"
+)
+
+foreach(TEST_SOURCE ${TEST_SOURCES})
+    get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
+
+    add_executable(${TEST_NAME} ${TEST_SOURCE})
+
+    target_link_libraries(${TEST_NAME} PRIVATE ${PROJECT_NAME}_core)
+
+    set_target_properties(${TEST_NAME} PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+
+    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+endforeach()
