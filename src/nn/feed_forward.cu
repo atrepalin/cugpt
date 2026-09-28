@@ -8,9 +8,9 @@ namespace cugpt::nn
 
     FeedForwardNetwork::FeedForwardNetwork(
         CudaContext &ctx,
-        size_t in_features,
-        size_t hidden_features,
-        size_t out_features)
+        std::size_t in_features,
+        std::size_t hidden_features,
+        std::size_t out_features)
         : ctx_(&ctx),
           input_features_(in_features),
           hidden_features_(hidden_features),

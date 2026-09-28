@@ -21,10 +21,10 @@ namespace cugpt::nn
             return rng;
         }
 
-        __global__ void addBiasKernel(float *output, const float *bias, size_t rows, size_t cols)
+        __global__ void addBiasKernel(float *output, const float *bias, std::size_t rows, std::size_t cols)
         {
-            const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-            const size_t total = rows * cols;
+            const std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+            const std::size_t total = rows * cols;
 
             if (idx < total)
             {
@@ -33,7 +33,7 @@ namespace cugpt::nn
             }
         }
 
-        __global__ void reduceBiasKernel(const float *grad, float *db, size_t rows, size_t cols)
+        __global__ void reduceBiasKernel(const float *grad, float *db, std::size_t rows, std::size_t cols)
         {
             const int j = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -43,7 +43,7 @@ namespace cugpt::nn
             }
 
             float sum = 0.0f;
-            for (size_t i = 0; i < rows; ++i)
+            for (std::size_t i = 0; i < rows; ++i)
             {
                 sum += grad[i * cols + j];
             }
@@ -53,7 +53,7 @@ namespace cugpt::nn
 
     } // namespace
 
-    Linear::Linear(CudaContext &ctx, size_t in_features, size_t out_features, bool include_bias)
+    Linear::Linear(CudaContext &ctx, std::size_t in_features, std::size_t out_features, bool include_bias)
         : ctx_(&ctx), input_features_(in_features), output_features_(out_features),
           weights(Shape{in_features, out_features})
     {
@@ -98,7 +98,7 @@ namespace cugpt::nn
         output.resize(out_shape);
         cached_input_ = &input;
 
-        const size_t rows = input.numel() / input_features_;
+        const std::size_t rows = input.numel() / input_features_;
         const float alpha = 1.0f;
         const float beta = 0.0f;
 
@@ -140,7 +140,7 @@ namespace cugpt::nn
         Shape grad_shape = cached_input_->shape();
         grad_input.resize(grad_shape);
 
-        const size_t rows = cached_input_->numel() / input_features_;
+        const std::size_t rows = cached_input_->numel() / input_features_;
         const float alpha = 1.0f;
         const float beta_zero = 0.0f;
         const float beta_one = 1.0f; // accumulate into parameter gradients

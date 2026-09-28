@@ -8,9 +8,9 @@ namespace cugpt::nn
     {
         constexpr int kThreads = 256;
 
-        __global__ void reluForwardKernel(const float *input, float *output, size_t total)
+        __global__ void reluForwardKernel(const float *input, float *output, std::size_t total)
         {
-            const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+            const std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
 
             if (idx < total)
             {
@@ -18,9 +18,9 @@ namespace cugpt::nn
             }
         }
 
-        __global__ void reluBackwardKernel(const float *input, const float *grad_output, float *grad_input, size_t total)
+        __global__ void reluBackwardKernel(const float *input, const float *grad_output, float *grad_input, std::size_t total)
         {
-            const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+            const std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
 
             if (idx < total)
             {
