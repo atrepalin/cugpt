@@ -66,6 +66,7 @@ namespace cugpt::core
     class Tensor : public AbstractTensor<float>
     {
     public:
+        Tensor() = default;
         explicit Tensor(const Shape &shape) : AbstractTensor<float>(shape) {}
         Tensor(std::initializer_list<size_t> shape) : AbstractTensor<float>(shape) {}
 
@@ -76,6 +77,7 @@ namespace cugpt::core
     class IntTensor : public AbstractTensor<int32_t>
     {
     public:
+        IntTensor() = default;
         explicit IntTensor(const Shape &shape) : AbstractTensor<int32_t>(shape) {}
         IntTensor(std::initializer_list<size_t> shape) : AbstractTensor<int32_t>(shape) {}
     };
