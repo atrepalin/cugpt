@@ -40,7 +40,7 @@ namespace cugpt::nn
                 return;
             }
 
-            const float *src = table + dim;
+            const float *src = table + token * dim;
             float *dst = output + idx * dim;
 
             memcpy(dst, src, sizeof(float) * dim);
