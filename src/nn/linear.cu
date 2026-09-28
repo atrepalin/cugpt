@@ -33,7 +33,6 @@ namespace cugpt::nn
             }
         }
 
-        // Bias gradients are reduced over all rows: db[j] = sum_i dY[i,j]
         __global__ void reduceBiasKernel(const float *grad, float *db, size_t rows, size_t cols)
         {
             const int j = blockIdx.x * blockDim.x + threadIdx.x;
@@ -91,7 +90,7 @@ namespace cugpt::nn
     {
         if (input.shape().empty() || input.shape().back() != input_features_)
         {
-            throw std::invalid_argument("Linear::forward: last input dimension does not match input_units");
+            throw std::invalid_argument("Linear::forward: last input dimension does not match input_features");
         }
 
         Shape out_shape = input.shape();
@@ -148,7 +147,7 @@ namespace cugpt::nn
 
         // [B, N] @ [N, M] -> [B, M]
         // dL/dX = dL/dO @ W^T (rm)
-        // dL/dX^T = W @ dL/dO^T
+        // dL/dX^T = W @ dL/dO^T (cm)
         CUBLAS_CHECK(cublasSgemm(
             ctx_->blas(),
             CUBLAS_OP_T, CUBLAS_OP_N,

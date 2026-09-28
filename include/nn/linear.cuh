@@ -8,7 +8,7 @@ namespace cugpt::nn
 {
     using namespace core;
 
-    class Linear : public Module
+    class Linear final : public Module
     {
     public:
         Linear(CudaContext &ctx, size_t in_features, size_t out_features, bool include_bias = true);
