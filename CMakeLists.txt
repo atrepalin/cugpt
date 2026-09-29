@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 project(cugpt LANGUAGES CXX CUDA)
 
-if (MSVC)
+if (MSVC AND CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_options(
         $<$<COMPILE_LANGUAGE:CXX>:/experimental:deterministic>
         $<$<COMPILE_LANGUAGE:CXX>:/pathmap:${CMAKE_CURRENT_SOURCE_DIR}=.>
