@@ -31,10 +31,13 @@ int main()
 
     Tensor x({2, 4});
     Tensor y;
+    Tensor causal_x({1, 4});
+    Tensor causal_y;
     Tensor dy({2, 4});
     Tensor dx;
 
     x.copyFromHost(hx.data(), ctx);
+    causal_x.copyFromHost(hx.data(), ctx);
     dy.copyFromHost(hdy.data(), ctx);
 
     softmax.forward(x, y);
@@ -47,6 +50,13 @@ int main()
     ctx.synchronize();
 
     expectNear(copyTensor(dx, ctx), hdx, 1e-5f, "backward");
+
+    // A causal 1x4 row can attend only to position 0, so its output must be [1, 0, 0, 0]
+    Softmax causal(ctx, true);
+    causal.forward(causal_x, causal_y);
+    ctx.synchronize();
+
+    expectNear(copyTensor(causal_y, ctx), {1, 0, 0, 0}, 1e-5f, "causal");
 
     std::cout << "softmax: OK\n";
 }
