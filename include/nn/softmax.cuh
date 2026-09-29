@@ -17,6 +17,6 @@ namespace cugpt::nn
     private:
         CudaContext *ctx_;
         bool causal_mask_;
-        const Tensor *cached_input_ = nullptr;
+        const Tensor *cached_output_ = nullptr;
     };
 } // namespace cugpt::nn

@@ -71,6 +71,46 @@ namespace cugpt::nn
                 __syncthreads();
             }
         }
+
+        __global__ void softmaxBackwardKernel(
+            const float *output,
+            const float *grad_output,
+            float *grad_input,
+            std::size_t cols,
+            std::size_t rows)
+        {
+            extern __shared__ float shared[];
+
+            const int tid = threadIdx.x;
+
+            for (std::size_t row = static_cast<std::size_t>(blockIdx.x);
+                 row < rows;
+                 row += static_cast<std::size_t>(gridDim.x))
+            {
+                const std::size_t base = row * cols;
+
+                float local_dot = 0.0f;
+
+                for (std::size_t j = tid; j < cols; j += blockDim.x)
+                {
+                    const std::size_t index = base + static_cast<std::size_t>(j);
+
+                    local_dot += grad_output[index] * output[index];
+                }
+
+                // The softmax Jacobian-vector product simplifies to o * (dL/dO - sum(dL/dO * o))
+                const float dot = blockReduceKernel(local_dot, shared, SumOp{});
+
+                for (int64_t j = tid; j < cols; j += blockDim.x)
+                {
+                    const std::size_t index = base + static_cast<std::size_t>(j);
+
+                    grad_input[index] = output[index] * (grad_output[index] - dot);
+                }
+
+                __syncthreads();
+            }
+        }
     } // namespace
 
     Softmax::Softmax(CudaContext &ctx, bool causal_mask)
@@ -113,5 +153,49 @@ namespace cugpt::nn
 
         CUDA_KERNEL_CHECK(softmaxForwardKernel<<<rows, kThreads, shared_bytes, ctx_->stream()>>>(
             input.data(), output.data(), cols, rows, causal_mask_));
+
+        cached_output_ = &output;
+    }
+
+    void Softmax::backward(const Tensor &grad_output, Tensor &grad_input)
+    {
+        if (cached_output_ == nullptr)
+        {
+            throw std::logic_error("Softmax::backward called before forward");
+        }
+
+        if (grad_output.shape().empty() || grad_output.shape() != cached_output_->shape())
+        {
+            throw std::invalid_argument("Softmax::backward: grad_output shape mismatch");
+        }
+
+        const std::size_t cols = cached_output_->shape().back();
+
+        if (cols <= 0)
+        {
+            throw std::invalid_argument("Softmax::backward: invalid number of columns");
+        }
+
+        const std::size_t numel = cached_output_->numel();
+        const std::size_t rows = numel / cols;
+
+        if (numel % cols != 0)
+        {
+            throw std::invalid_argument("Softmax::backward: invalid tensor shape");
+        }
+
+        grad_input.resize(cached_output_->shape());
+
+        if (rows == 0)
+        {
+            return;
+        }
+
+        const int warp_count = (kThreads + kWarpSize - 1) / kWarpSize;
+
+        const std::size_t shared_bytes = static_cast<std::size_t>(warp_count) * sizeof(float);
+
+        CUDA_KERNEL_CHECK(softmaxBackwardKernel<<<rows, kThreads, shared_bytes, ctx_->stream()>>>(
+            cached_output_->data(), grad_output.data(), grad_input.data(), cols, rows));
     }
 } // namespace cugpt::nn
