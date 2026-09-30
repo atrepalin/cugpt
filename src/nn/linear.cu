@@ -64,7 +64,7 @@ namespace cugpt::nn
             throw std::invalid_argument("Linear dimensions must be positive");
         }
 
-        const float limit = std::sqrt(6.0f / static_cast<float>(in_features + out_features));
+        const float limit = std::sqrt(6.0f / static_cast<float>(in_features));
         std::uniform_real_distribution<float> distribution(-limit, limit);
         std::vector<float> host_weights(weights.data.numel());
 
