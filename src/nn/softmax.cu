@@ -93,7 +93,7 @@ namespace cugpt::nn
 
                 for (std::size_t j = tid; j < cols; j += blockDim.x)
                 {
-                    const std::size_t index = base + static_cast<std::size_t>(j);
+                    const std::size_t index = base + j;
 
                     local_dot += grad_output[index] * output[index];
                 }
@@ -103,7 +103,7 @@ namespace cugpt::nn
 
                 for (int64_t j = tid; j < cols; j += blockDim.x)
                 {
-                    const std::size_t index = base + static_cast<std::size_t>(j);
+                    const std::size_t index = base + j;
 
                     grad_input[index] = output[index] * (grad_output[index] - dot);
                 }
