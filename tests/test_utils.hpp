@@ -26,8 +26,23 @@ inline void expectNear(const std::vector<float> &actual,
     {
         max_error = std::fmax(max_error, std::fabs(actual[i] - expected[i]));
     }
-    
+
     std::cout << name << " max_abs_error=" << max_error << '\n';
+    if (max_error > atol)
+    {
+        std::cerr << name << ": tolerance exceeded\n";
+        std::exit(EXIT_FAILURE);
+    }
+}
+
+inline void expectNear(float actual,
+                       float expected,
+                       float atol,
+                       const std::string &name)
+{
+    float max_error = std::fabs(actual - expected);
+    std::cout << name << " max_abs_error=" << max_error << '\n';
+    
     if (max_error > atol)
     {
         std::cerr << name << ": tolerance exceeded\n";
