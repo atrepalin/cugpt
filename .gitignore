@@ -318,3 +318,4 @@ CMakeUserPresets.json
 *.safetensors
 *.bin
 *.pkl
+*.csv
