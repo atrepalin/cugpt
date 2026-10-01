@@ -101,7 +101,7 @@ namespace cugpt::nn
                 // The softmax Jacobian-vector product simplifies to o * (dL/dO - sum(dL/dO * o))
                 const float dot = blockReduceKernel(local_dot, shared, SumOp{});
 
-                for (int64_t j = tid; j < cols; j += blockDim.x)
+                for (std::size_t j = tid; j < cols; j += blockDim.x)
                 {
                     const std::size_t index = base + j;
 
