@@ -6,9 +6,11 @@
 #include "io/serialization.hpp"
 #include "training/training.cuh"
 
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -33,6 +35,16 @@ namespace
         std::size_t examples_per_operation = 20'000;
         std::uint64_t seed = 42;
         std::string checkpoint_path = "best_model.safetensors";
+
+        float learning_rate = 3.0e-4f;
+        float beta1 = 0.9f;
+        float beta2 = 0.999f;
+        float optimizer_eps = 1.0e-8f;
+        float weight_decay = 0.01f;
+
+        bool use_reduce_lr_on_plateau = false;
+        ReduceLROnPlateau::Config plateau;
+        PlateauMonitor plateau_monitor = PlateauMonitor::ValidationLoss;
     };
 
     struct InferenceArgs
@@ -72,6 +84,91 @@ namespace
         }
     }
 
+    std::size_t parseNonNegativeSize(const char *value, const char *name)
+    {
+        try
+        {
+            std::size_t consumed = 0;
+            const unsigned long long parsed = std::stoull(value, &consumed);
+            if (consumed == 0 || value[consumed] != '\0')
+            {
+                throw std::invalid_argument("invalid integer");
+            }
+            return static_cast<std::size_t>(parsed);
+        }
+        catch (const std::exception &)
+        {
+            throw std::invalid_argument(std::string("Invalid ") + name + ": " + value);
+        }
+    }
+
+    float parseFloat(const char *value, const char *name)
+    {
+        try
+        {
+            std::size_t consumed = 0;
+            const float parsed = std::stof(value, &consumed);
+            if (consumed == 0 || value[consumed] != '\0' || !std::isfinite(parsed))
+            {
+                throw std::invalid_argument("invalid floating-point value");
+            }
+            return parsed;
+        }
+        catch (const std::exception &)
+        {
+            throw std::invalid_argument(std::string("Invalid ") + name + ": " + value);
+        }
+    }
+
+    ReduceLROnPlateauMode parsePlateauMode(const char *value)
+    {
+        const std::string mode = value;
+        if (mode == "min")
+        {
+            return ReduceLROnPlateauMode::Min;
+        }
+        if (mode == "max")
+        {
+            return ReduceLROnPlateauMode::Max;
+        }
+        throw std::invalid_argument(std::string("Invalid lr-scheduler-mode: ") + value + " (expected min or max)");
+    }
+
+    ReduceLROnPlateauThresholdMode parsePlateauThresholdMode(const char *value)
+    {
+        const std::string mode = value;
+        if (mode == "rel")
+        {
+            return ReduceLROnPlateauThresholdMode::Rel;
+        }
+        if (mode == "abs")
+        {
+            return ReduceLROnPlateauThresholdMode::Abs;
+        }
+        throw std::invalid_argument(
+            std::string("Invalid lr-scheduler-threshold-mode: ") + value + " (expected rel or abs)");
+    }
+
+    PlateauMonitor parsePlateauMonitor(const char *value)
+    {
+        const std::string monitor = value;
+        if (monitor == "train-loss")
+        {
+            return PlateauMonitor::TrainLoss;
+        }
+        if (monitor == "val-loss")
+        {
+            return PlateauMonitor::ValidationLoss;
+        }
+        if (monitor == "val-accuracy")
+        {
+            return PlateauMonitor::ValidationAccuracy;
+        }
+        throw std::invalid_argument(
+            std::string("Invalid lr-scheduler-monitor: ") + value +
+            " (expected train-loss, val-loss, or val-accuracy)");
+    }
+
     [[noreturn]] void printUsage()
     {
         std::cout
@@ -83,7 +180,22 @@ namespace
             << "  --batch-size N\n"
             << "  --examples-per-operation N\n"
             << "  --seed N\n"
-            << "  --checkpoint PATH   Best model checkpoint (default: best_model.safetensors)\n\n"
+            << "  --checkpoint PATH   Best model checkpoint (default: best_model.safetensors)\n"
+            << "  --lr FLOAT           AdamW learning rate (default: 3e-4)\n"
+            << "  --beta1 FLOAT\n"
+            << "  --beta2 FLOAT\n"
+            << "  --optimizer-eps FLOAT\n"
+            << "  --weight-decay FLOAT\n"
+            << "  --lr-scheduler {none|reduce-lr-on-plateau}\n"
+            << "  --lr-scheduler-monitor {train-loss|val-loss|val-accuracy}\n"
+            << "  --lr-scheduler-mode {min|max}\n"
+            << "  --lr-scheduler-factor FLOAT\n"
+            << "  --lr-scheduler-patience N\n"
+            << "  --lr-scheduler-threshold FLOAT\n"
+            << "  --lr-scheduler-threshold-mode {rel|abs}\n"
+            << "  --lr-scheduler-cooldown N\n"
+            << "  --lr-scheduler-min-lr FLOAT\n"
+            << "  --lr-scheduler-eps FLOAT\n\n"
             << "Inference options:\n"
             << "  --checkpoint PATH\n"
             << "  --text TEXT\n"
@@ -116,6 +228,79 @@ namespace
             else if (option == "--checkpoint" && i + 1 < argc)
             {
                 args.checkpoint_path = argv[++i];
+            }
+            else if (option == "--lr" && i + 1 < argc)
+            {
+                args.learning_rate = parseFloat(argv[++i], "lr");
+            }
+            else if (option == "--beta1" && i + 1 < argc)
+            {
+                args.beta1 = parseFloat(argv[++i], "beta1");
+            }
+            else if (option == "--beta2" && i + 1 < argc)
+            {
+                args.beta2 = parseFloat(argv[++i], "beta2");
+            }
+            else if (option == "--optimizer-eps" && i + 1 < argc)
+            {
+                args.optimizer_eps = parseFloat(argv[++i], "optimizer-eps");
+            }
+            else if (option == "--weight-decay" && i + 1 < argc)
+            {
+                args.weight_decay = parseFloat(argv[++i], "weight-decay");
+            }
+            else if (option == "--lr-scheduler" && i + 1 < argc)
+            {
+                const std::string scheduler = argv[++i];
+                if (scheduler == "none")
+                {
+                    args.use_reduce_lr_on_plateau = false;
+                }
+                else if (scheduler == "reduce-lr-on-plateau" || scheduler == "reduce-on-plateau")
+                {
+                    args.use_reduce_lr_on_plateau = true;
+                }
+                else
+                {
+                    throw std::invalid_argument(
+                        "Invalid lr-scheduler: " + scheduler + " (expected none or reduce-lr-on-plateau)");
+                }
+            }
+            else if (option == "--lr-scheduler-monitor" && i + 1 < argc)
+            {
+                args.plateau_monitor = parsePlateauMonitor(argv[++i]);
+            }
+            else if (option == "--lr-scheduler-mode" && i + 1 < argc)
+            {
+                args.plateau.mode = parsePlateauMode(argv[++i]);
+            }
+            else if (option == "--lr-scheduler-factor" && i + 1 < argc)
+            {
+                args.plateau.factor = parseFloat(argv[++i], "lr-scheduler-factor");
+            }
+            else if (option == "--lr-scheduler-patience" && i + 1 < argc)
+            {
+                args.plateau.patience = parseNonNegativeSize(argv[++i], "lr-scheduler-patience");
+            }
+            else if (option == "--lr-scheduler-threshold" && i + 1 < argc)
+            {
+                args.plateau.threshold = parseFloat(argv[++i], "lr-scheduler-threshold");
+            }
+            else if (option == "--lr-scheduler-threshold-mode" && i + 1 < argc)
+            {
+                args.plateau.threshold_mode = parsePlateauThresholdMode(argv[++i]);
+            }
+            else if (option == "--lr-scheduler-cooldown" && i + 1 < argc)
+            {
+                args.plateau.cooldown = parseNonNegativeSize(argv[++i], "lr-scheduler-cooldown");
+            }
+            else if (option == "--lr-scheduler-min-lr" && i + 1 < argc)
+            {
+                args.plateau.min_lr = parseFloat(argv[++i], "lr-scheduler-min-lr");
+            }
+            else if (option == "--lr-scheduler-eps" && i + 1 < argc)
+            {
+                args.plateau.eps = parseFloat(argv[++i], "lr-scheduler-eps");
             }
             else if (option == "--help")
             {
@@ -192,11 +377,17 @@ namespace
         AdamW optimizer(
             ctx,
             model.parameters(),
-            3.0e-4f,
-            0.9f,
-            0.999f,
-            1.0e-8f,
-            0.01f);
+            args.learning_rate,
+            args.beta1,
+            args.beta2,
+            args.optimizer_eps,
+            args.weight_decay);
+
+        std::unique_ptr<ReduceLROnPlateau> lr_scheduler;
+        if (args.use_reduce_lr_on_plateau)
+        {
+            lr_scheduler = std::make_unique<ReduceLROnPlateau>(optimizer, args.plateau);
+        }
 
         TrainingConfig config;
         config.epochs = args.epochs;
@@ -205,12 +396,13 @@ namespace
         config.ignore_index = dataset.tokenizer().padId();
         config.print_every = 1;
         config.best_checkpoint_path = args.checkpoint_path;
+        config.plateau_monitor = args.plateau_monitor;
 
         std::cout << "train_size=" << dataset.trainSize()
                   << " val_size=" << dataset.valSize()
                   << " sequence_length=" << dataset.sequenceLength() << '\n';
 
-        const auto history = trainModel(ctx, model, loss, optimizer, dataset, config);
+        const auto history = trainModel(ctx, model, loss, optimizer, lr_scheduler.get(), dataset, config);
 
         float best_acc = -1.0f;
         for (const auto &epoch : history)

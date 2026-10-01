@@ -112,6 +112,15 @@ namespace cugpt::training
         }
     }
 
+    void AdamW::setLearningRate(float learning_rate)
+    {
+        if (!(learning_rate >= 0.0f) || !std::isfinite(learning_rate))
+        {
+            throw std::invalid_argument("AdamW: learning_rate must be finite and non-negative");
+        }
+        learning_rate_ = learning_rate;
+    }
+
     void AdamW::step()
     {
         // Bias correction uses the current 1-based optimizer step

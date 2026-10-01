@@ -4,6 +4,7 @@
 #include "nn/gpt.cuh"
 #include "training/cross_entropy.cuh"
 #include "training/adamw.cuh"
+#include "training/reduce_lr_on_plateau.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -37,7 +38,15 @@ namespace cugpt::training
         float train_loss = 0.0f;
         float val_loss = 0.0f;
         float val_sequence_accuracy = 0.0f;
+        float learning_rate = 0.0f;
         bool has_validation = false;
+    };
+
+    enum class PlateauMonitor
+    {
+        TrainLoss,
+        ValidationLoss,
+        ValidationAccuracy
     };
 
     struct TrainingConfig
@@ -48,6 +57,7 @@ namespace cugpt::training
         int32_t ignore_index = 0;
         std::size_t print_every = 1;
         std::string best_checkpoint_path = "best_model.safetensors";
+        PlateauMonitor plateau_monitor = PlateauMonitor::ValidationLoss;
     };
 
     EvaluationMetrics evaluate(
@@ -64,6 +74,7 @@ namespace cugpt::training
         GPT &model,
         CrossEntropyLoss &loss,
         AdamW &optimizer,
+        ReduceLROnPlateau *lr_scheduler,
         const Dataset &dataset,
         const TrainingConfig &config);
 } // namespace cugpt::training

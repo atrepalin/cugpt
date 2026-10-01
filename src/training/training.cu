@@ -214,6 +214,7 @@ namespace cugpt::training
         GPT &model,
         CrossEntropyLoss &loss,
         AdamW &optimizer,
+        ReduceLROnPlateau *lr_scheduler,
         const Dataset &dataset,
         const TrainingConfig &config)
     {
@@ -289,6 +290,44 @@ namespace cugpt::training
                 }
             }
 
+            if (lr_scheduler != nullptr)
+            {
+                float monitor_value = metrics.train_loss;
+                switch (config.plateau_monitor)
+                {
+                case PlateauMonitor::TrainLoss:
+                    monitor_value = metrics.train_loss;
+                    break;
+                case PlateauMonitor::ValidationLoss:
+                    if (!metrics.has_validation)
+                    {
+                        throw std::invalid_argument(
+                            "trainModel: validation-loss plateau monitoring requires a validation split");
+                    }
+                    monitor_value = metrics.val_loss;
+                    break;
+                case PlateauMonitor::ValidationAccuracy:
+                    if (!metrics.has_validation)
+                    {
+                        throw std::invalid_argument(
+                            "trainModel: validation-accuracy plateau monitoring requires a validation split");
+                    }
+                    monitor_value = metrics.val_sequence_accuracy;
+                    break;
+                default:
+                    throw std::logic_error("trainModel: invalid plateau monitor");
+                }
+
+                const float old_learning_rate = optimizer.learningRate();
+                const bool reduced = lr_scheduler->step(monitor_value);
+                if (reduced)
+                {
+                    std::cout << "ReduceLROnPlateau: learning_rate " << old_learning_rate
+                              << " -> " << optimizer.learningRate() << '\n';
+                }
+            }
+
+            metrics.learning_rate = optimizer.learningRate();
             history.push_back(metrics);
 
             if (config.print_every != 0 &&
@@ -296,7 +335,8 @@ namespace cugpt::training
             {
                 std::cout << "Epoch " << epoch << '/' << config.epochs
                           << " | steps=" << metrics.steps
-                          << " | train_loss=" << metrics.train_loss;
+                          << " | train_loss=" << metrics.train_loss
+                          << " | lr=" << optimizer.learningRate();
                 if (metrics.has_validation)
                 {
                     std::cout << " | val_loss=" << metrics.val_loss
@@ -312,14 +352,15 @@ namespace cugpt::training
 
         if (file.is_open())
         {
-            file << "step,train_loss,val_loss,val_acc\n";
+            file << "step,train_loss,val_loss,val_acc,learning_rate\n";
 
             for (auto epoch : history)
             {
                 file << epoch.epoch << ','
                      << epoch.train_loss << ','
                      << epoch.val_loss << ','
-                     << epoch.val_sequence_accuracy << '\n';
+                     << epoch.val_sequence_accuracy << ','
+                     << epoch.learning_rate << '\n';
             }
 
             file.close();

@@ -28,6 +28,7 @@ namespace cugpt::training
 
         std::uint64_t stepCount() const noexcept { return step_count_; }
         float learningRate() const noexcept { return learning_rate_; }
+        void setLearningRate(float learning_rate);
         float beta1() const noexcept { return beta1_; }
         float beta2() const noexcept { return beta2_; }
         float eps() const noexcept { return eps_; }
