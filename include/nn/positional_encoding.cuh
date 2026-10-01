@@ -9,7 +9,7 @@ namespace cugpt::nn
     class PositionalEncoding final : public Module
     {
     public:
-        PositionalEncoding(CudaContext &ctx, std::size_t embedding_length, float scale=1.0);
+        PositionalEncoding(CudaContext &ctx, std::size_t embedding_length, float scale = 1.0);
 
         void forward(const Tensor &input, Tensor &output);
 

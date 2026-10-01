@@ -39,7 +39,7 @@ namespace cugpt::nn
         }
 
         const float residual_scale = 1.0f / std::sqrt(static_cast<float>(2 * blocks));
-        blocks_.reserve(static_cast<std::size_t>(blocks));
+        blocks_.reserve(blocks);
         for (int64_t i = 0; i < blocks; ++i)
         {
             blocks_.push_back(std::make_unique<TransformerBlock>(
@@ -54,7 +54,7 @@ namespace cugpt::nn
         registerModule("final_layernorm", final_norm_);
         registerModule("final_linear", final_linear_);
     }
-    
+
     void GPT::forward(const IntTensor &tokens, Tensor &logits)
     {
         const auto &s = tokens.shape();

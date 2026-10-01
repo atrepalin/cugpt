@@ -195,7 +195,7 @@ namespace cugpt::data
 
             for (std::size_t i = 0; i < sequences.size(); ++i)
             {
-                std::copy(sequences[i].begin(), sequences[i].end(), result.begin() + static_cast<std::ptrdiff_t>(i * sequence_length));
+                std::copy(sequences[i].begin(), sequences[i].end(), result.begin() + i * sequence_length);
             }
 
             return result;
@@ -491,9 +491,9 @@ namespace cugpt::data
 
         const std::size_t split = static_cast<std::size_t>(static_cast<double>(examples.size()) * (1.0 - config.val_fraction));
 
-        std::vector<std::string> train_texts(examples.begin(), examples.begin() + static_cast<std::ptrdiff_t>(split));
+        std::vector<std::string> train_texts(examples.begin(), examples.begin() + split);
 
-        std::vector<std::string> val_texts(examples.begin() + static_cast<std::ptrdiff_t>(split), examples.end());
+        std::vector<std::string> val_texts(examples.begin() + split, examples.end());
 
         std::vector<std::vector<int32_t>> encoded_train(train_texts.size());
 
@@ -555,9 +555,9 @@ namespace cugpt::data
             {
                 const auto base = i * t;
 
-                std::copy(sequences[i].begin(), sequences[i].begin() + static_cast<std::ptrdiff_t>(t), x_out.begin() + static_cast<std::ptrdiff_t>(base));
+                std::copy(sequences[i].begin(), sequences[i].begin() + t, x_out.begin() + base);
 
-                std::copy(sequences[i].begin() + 1, sequences[i].end(), y_out.begin() + static_cast<std::ptrdiff_t>(base));
+                std::copy(sequences[i].begin() + 1, sequences[i].end(), y_out.begin() + base);
 
                 std::size_t eq_count = 0;
                 std::size_t eq_pos = 0;
@@ -611,7 +611,7 @@ namespace cugpt::data
 
         const std::size_t size = count * sequence_length_;
 
-        return std::vector<int32_t>(source.begin() + static_cast<std::ptrdiff_t>(offset), source.begin() + static_cast<std::ptrdiff_t>(offset + size));
+        return std::vector<int32_t>(source.begin() + offset, source.begin() + (offset + size));
     }
 
     std::vector<int32_t> MathDataset::makeBatchY(bool validation, std::size_t start, std::size_t count) const
@@ -634,7 +634,7 @@ namespace cugpt::data
 
         const std::size_t size = count * sequence_length_;
 
-        return std::vector<int32_t>(source.begin() + static_cast<std::ptrdiff_t>(offset), source.begin() + static_cast<std::ptrdiff_t>(offset + size));
+        return std::vector<int32_t>(source.begin() + offset, source.begin() + (offset + size));
     }
 
     void copyBatchToDevice(

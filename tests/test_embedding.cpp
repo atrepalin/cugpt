@@ -27,11 +27,11 @@ int main()
         10, 11, 12};
 
     const std::vector<float> output_ref = {
-        1, 2, 3, 
-        7, 8, 9, 
+        1, 2, 3,
+        7, 8, 9,
         4, 5, 6,
-        7, 8, 9, 
-        7, 8, 9, 
+        7, 8, 9,
+        7, 8, 9,
         10, 11, 12};
 
     const std::vector<float> grad_ref = {
@@ -43,8 +43,8 @@ int main()
     Embedding embedding(ctx, 4, 3);
 
     embedding.embeddings.data.copyFromHost(table.data(), ctx);
-    
-    // 2 batches of 3 tokens each  
+
+    // 2 batches of 3 tokens each
     IntTensor tokens({2, 3});
     Tensor grad{{2, 3, 3}};
 

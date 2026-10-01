@@ -14,8 +14,6 @@ namespace
     {
         extern __shared__ float shared[];
 
-        const int warpCount = (blockDim.x + kWarpSize - 1) / kWarpSize;
-
         float localSum = input[threadIdx.x];
 
         output[blockIdx.x] = blockReduceKernel(localSum, shared, SumOp{});

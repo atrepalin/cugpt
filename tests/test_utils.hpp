@@ -42,7 +42,7 @@ inline void expectNear(float actual,
 {
     float max_error = std::fabs(actual - expected);
     std::cout << name << " max_abs_error=" << max_error << '\n';
-    
+
     if (max_error > atol)
     {
         std::cerr << name << ": tolerance exceeded\n";

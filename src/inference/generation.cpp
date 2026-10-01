@@ -13,7 +13,7 @@ namespace cugpt::inference
     using namespace data;
     namespace
     {
-        int32_t greedyNextToken(CudaContext &ctx,GPT &model,const std::vector<int32_t> &tokens)
+        int32_t greedyNextToken(CudaContext &ctx, GPT &model, const std::vector<int32_t> &tokens)
         {
             if (tokens.empty())
             {
@@ -32,7 +32,7 @@ namespace cugpt::inference
             std::vector<float> last_logits(vocab);
             const float *last_row = logits.data() + (length - 1) * vocab;
 
-            CUDA_CHECK(cudaMemcpyAsync(last_logits.data(),last_row,last_logits.size() * sizeof(float),cudaMemcpyDeviceToHost,ctx.stream()));
+            CUDA_CHECK(cudaMemcpyAsync(last_logits.data(), last_row, last_logits.size() * sizeof(float), cudaMemcpyDeviceToHost, ctx.stream()));
             ctx.synchronize();
 
             const auto it = std::max_element(last_logits.begin(), last_logits.end());

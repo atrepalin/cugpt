@@ -29,7 +29,7 @@ namespace cugpt::io
         constexpr std::string_view kMetaNumHeads = "cugpt.n_heads";
         constexpr std::string_view kMetaPositionalScale = "cugpt.positional_scale";
 
-        std::string int64String(const std::int64_t value)
+        std::string sizeString(const std::size_t value)
         {
             return std::to_string(value);
         }
@@ -41,18 +41,9 @@ namespace cugpt::io
             return stream.str();
         }
 
-        std::int64_t parseInt64(const std::string &value, const char *name)
+        std::size_t parseSize(const std::string &value, const char *name)
         {
-            std::int64_t result = 0;
-            const char *first = value.data();
-            const char *last = value.data() + value.size();
-            const auto parsed = std::from_chars(first, last, result);
-
-            if (parsed.ec != std::errc{} || parsed.ptr != last)
-            {
-                throw std::runtime_error("Invalid safetensors metadata '" + std::string(name) + "': " + value);
-            }
-
+            std::size_t result = std::stoull(value);
             return result;
         }
 
@@ -76,22 +67,6 @@ namespace cugpt::io
             }
         }
 
-        std::vector<std::size_t> toSafeTensorShape(const Shape &shape)
-        {
-            std::vector<std::size_t> result;
-            result.reserve(shape.size());
-            for (const std::int64_t dim : shape)
-            {
-                if (dim <= 0)
-                {
-                    throw std::runtime_error("Cannot serialize tensor with non-positive dimension");
-                }
-
-                result.push_back(static_cast<std::size_t>(dim));
-            }
-            return result;
-        }
-
         void validateArchitecture(const SafeTensorsReader &reader, const GPT &model)
         {
             if (reader.metadata(kMetaFormat) != std::string(kFormatName) + ":" + std::string(kFormatVersion))
@@ -99,10 +74,10 @@ namespace cugpt::io
                 throw std::runtime_error("Unsupported cugpt safetensors format");
             }
 
-            if (parseInt64(reader.metadata(kMetaVocabSize), "cugpt.vocab_size") != model.vocabSize() ||
-                parseInt64(reader.metadata(kMetaBlocks), "cugpt.blocks") != model.numBlocks() ||
-                parseInt64(reader.metadata(kMetaModelDim), "cugpt.dim_model") != model.modelDim() ||
-                parseInt64(reader.metadata(kMetaNumHeads), "cugpt.num_heads") != model.numHeads() ||
+            if (parseSize(reader.metadata(kMetaVocabSize), "cugpt.vocab_size") != model.vocabSize() ||
+                parseSize(reader.metadata(kMetaBlocks), "cugpt.blocks") != model.numBlocks() ||
+                parseSize(reader.metadata(kMetaModelDim), "cugpt.dim_model") != model.modelDim() ||
+                parseSize(reader.metadata(kMetaNumHeads), "cugpt.num_heads") != model.numHeads() ||
                 parseFloat(reader.metadata(kMetaPositionalScale), "cugpt.positional_scale") != model.positionalScale())
             {
                 throw std::runtime_error("Model checkpoint architecture does not match target model");
@@ -184,10 +159,10 @@ namespace cugpt::io
         std::vector<float> host;
 
         writer.addMetadata(kMetaFormat, std::string(kFormatName) + ":" + std::string(kFormatVersion));
-        writer.addMetadata(kMetaVocabSize, int64String(model.vocabSize()));
-        writer.addMetadata(kMetaBlocks, int64String(model.numBlocks()));
-        writer.addMetadata(kMetaModelDim, int64String(model.modelDim()));
-        writer.addMetadata(kMetaNumHeads, int64String(model.numHeads()));
+        writer.addMetadata(kMetaVocabSize, sizeString(model.vocabSize()));
+        writer.addMetadata(kMetaBlocks, sizeString(model.numBlocks()));
+        writer.addMetadata(kMetaModelDim, sizeString(model.modelDim()));
+        writer.addMetadata(kMetaNumHeads, sizeString(model.numHeads()));
         writer.addMetadata(kMetaPositionalScale, floatString(model.positionalScale()));
 
         for (const auto &[name, parameter] : model.namedParameters())
@@ -200,8 +175,7 @@ namespace cugpt::io
             host.resize(parameter->data.numel());
             parameter->data.copyToHost(host.data(), ctx);
 
-            writer.add(name, host.data(), host.size(),
-                       toSafeTensorShape(parameter->data.shape()));
+            writer.add(name, host.data(), host.size(), parameter->data.shape());
         }
 
         writer.save(path);
@@ -221,10 +195,9 @@ namespace cugpt::io
             }
 
             const Shape &shape = parameter->data.shape();
-            const std::vector<std::size_t> safeShape = toSafeTensorShape(shape);
             std::vector<float> host(parameter->data.numel());
 
-            reader.read(name, host.data(), host.size(), safeShape);
+            reader.read(name, host.data(), host.size(), parameter->data.shape());
             parameter->data.copyFromHost(host.data(), ctx);
         }
 

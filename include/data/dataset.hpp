@@ -91,8 +91,8 @@ namespace cugpt::data
 
         const Tokenizer &tokenizer() const noexcept override { return tokenizer_; }
         std::size_t sequenceLength() const noexcept override { return sequence_length_; }
-        std::size_t trainSize() const noexcept override { return train_x_.size() / static_cast<std::size_t>(sequence_length_); }
-        std::size_t valSize() const noexcept override { return val_x_.size() / static_cast<std::size_t>(sequence_length_); }
+        std::size_t trainSize() const noexcept override { return train_x_.size() / sequence_length_; }
+        std::size_t valSize() const noexcept override { return val_x_.size() / sequence_length_; }
 
         std::vector<int32_t> makeBatchX(bool validation, std::size_t start, std::size_t count) const override;
         std::vector<int32_t> makeBatchY(bool validation, std::size_t start, std::size_t count) const override;

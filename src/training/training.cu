@@ -23,19 +23,19 @@ namespace cugpt::training
         __global__ void argmaxRowsKernel(
             const float *logits,
             int32_t *predictions,
-            std::size_t rows,
-            int vocab)
+            std::size_t total,
+            std::size_t vocab)
         {
             const std::size_t row = blockIdx.x * blockDim.x + threadIdx.x;
-            if (row >= rows)
+            if (row >= total)
             {
                 return;
             }
 
-            const float *base = logits + row * static_cast<std::size_t>(vocab);
+            const float *base = logits + row * vocab;
             int32_t best = 0;
             float best_value = base[0];
-            for (int j = 1; j < vocab; ++j)
+            for (std::size_t j = 1; j < vocab; ++j)
             {
                 const float value = base[j];
                 if (value > best_value)
@@ -70,7 +70,7 @@ namespace cugpt::training
 
             const auto &x_source = validation ? dataset.valX() : dataset.trainX();
             const auto &y_source = validation ? dataset.valY() : dataset.trainY();
-            const std::size_t stride = static_cast<std::size_t>(dataset.sequenceLength());
+            const std::size_t stride = dataset.sequenceLength();
 
             host_x.resize(count * stride);
             host_y.resize(count * stride);
@@ -152,7 +152,7 @@ namespace cugpt::training
             std::vector<int32_t> host_predictions(predictions.numel());
             predictions.copyToHost(host_predictions.data(), ctx);
 
-            const std::size_t sequence_length = static_cast<std::size_t>(dataset.sequenceLength());
+            const std::size_t sequence_length = dataset.sequenceLength();
             for (std::size_t i = 0; i < count; ++i)
             {
                 bool correct = true;
@@ -242,8 +242,7 @@ namespace cugpt::training
         std::vector<EpochMetrics> history;
         history.reserve(config.epochs);
 
-        const std::size_t steps_per_epoch =
-            (dataset.trainSize() + config.batch_size - 1) / config.batch_size;
+        const std::size_t steps_per_epoch = (dataset.trainSize() + config.batch_size - 1) / config.batch_size;
         float best_acc = -1.0f;
 
         for (std::size_t epoch = 1; epoch <= config.epochs; ++epoch)
