@@ -44,6 +44,10 @@ namespace cugpt::core
     {
         const auto n = checkedNumel(shape);
         shape_ = shape;
+        if (numel_ == n)
+        {
+            return;
+        }
         numel_ = n;
         buffer_.allocate(bytes());
     }

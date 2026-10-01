@@ -144,8 +144,6 @@ namespace cugpt::training
                 p->data.data(), p->grad.data(), m_[i].data(), v_[i].data(), total,
                 learning_rate_, beta1_, beta2_, inv_beta1_correction, inv_beta2_correction, eps_, weight_decay_));
         }
-
-        ctx_->synchronize();
     }
 
     void AdamW::zeroGrad()
