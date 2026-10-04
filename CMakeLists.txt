@@ -111,7 +111,7 @@ target_compile_options(cugpt_core PRIVATE
 # CLI
 # ---------------------------------------------------------
 
-add_executable(cugpt_cli src/main.cpp)
+add_executable(cugpt_cli src/main.cpp src/dataset.cpp)
 
 target_link_libraries(cugpt_cli PRIVATE cugpt_core)
 

@@ -18,14 +18,14 @@ namespace cugpt::inference
     std::vector<int32_t> generateTokenIds(
         CudaContext &ctx,
         GPT &model,
-        const MathTokenizer &tokenizer,
+        const Tokenizer &tokenizer,
         std::string_view text,
         std::size_t max_new_tokens = 50);
 
     std::string generateText(
         CudaContext &ctx,
         GPT &model,
-        const MathTokenizer &tokenizer,
+        const Tokenizer &tokenizer,
         std::string_view text,
         std::size_t max_new_tokens = 50);
 } // namespace cugpt::inference

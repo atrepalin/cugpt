@@ -1,4 +1,4 @@
-#include "data/dataset.hpp"
+#include "dataset.hpp"
 #include "inference/generation.hpp"
 #include "nn/gpt.cuh"
 #include "training/cross_entropy.cuh"
@@ -21,7 +21,6 @@
 
 using namespace cugpt::core;
 using namespace cugpt::nn;
-using namespace cugpt::data;
 using namespace cugpt::training;
 using namespace cugpt::io;
 using namespace cugpt::inference;
