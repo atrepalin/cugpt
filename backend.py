@@ -28,9 +28,12 @@ class Backend:
 
 
 class NumpyBackend(Backend):
+    def __init__(self):
+        self._xp = np
+
     @property
     def xp(self):
-        return np
+        return self._xp
 
     @property
     def device(self):
@@ -52,18 +55,18 @@ class CudaBackend(Backend):
         if cp.cuda.runtime.getDeviceCount() == 0:
             raise RuntimeError("No CUDA device found")
 
+        self._xp = cp
+
     @property
     def xp(self):
-        import cupy
-
-        return cupy
+        return self._xp
 
     @property
     def device(self):
         return Device.GPU
 
     def as_numpy(self, array: npt.NDArray) -> npt.NDArray:
-        return self.xp.asnumpy(array)
+        return self._xp.asnumpy(array)
 
     def scatter_add(
         self, array: npt.NDArray, indices: npt.NDArray, values: npt.NDArray
@@ -76,5 +79,7 @@ class CudaBackend(Backend):
 def get_backend(device: Device):
     if device == Device.CPU:
         return NumpyBackend()
-    else:
+    if device == Device.GPU:
         return CudaBackend()
+
+    raise ValueError(f"Unsupported device: {device!r}")

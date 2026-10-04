@@ -1,23 +1,36 @@
 import math
-from typing import Callable, Generator
+from typing import Generator
 
 import numpy as np
 import numpy.typing as npt
+
+from backend import Backend, Device, get_backend
 from safetensors import safe_open
 from safetensors.numpy import load_file, save_file
 
-xp: np = None
-scatter_add: Callable[[npt.NDArray, npt.NDArray, npt.NDArray], None] = None
-as_numpy: Callable[[npt.NDArray], npt.NDArray] = None
-
 
 class Parameter:
-    def __init__(self, data: npt.NDArray):
+    def __init__(self, data: npt.NDArray, backend: Backend):
         self.data = data
-        self.grad = xp.zeros_like(data)
+        self.grad = backend.xp.zeros_like(data)
 
 
 class Module:
+    def __init__(self, backend: Backend):
+        self.backend = backend
+
+    @property
+    def xp(self):
+        return self.backend.xp
+
+    @property
+    def scatter_add(self):
+        return self.backend.scatter_add
+
+    @property
+    def as_numpy(self):
+        return self.backend.as_numpy
+
     @property
     def parameters(self) -> Generator[Parameter, None, None]:
         for _, parameter in self.named_parameters():
@@ -50,7 +63,7 @@ class Module:
         state = {}
 
         for name, parameter in self.named_parameters():
-            state[name] = xp.copy(parameter.data)
+            state[name] = self.xp.copy(parameter.data)
 
         return state
 
@@ -88,65 +101,66 @@ class Module:
 class ReLU(Module):
     _inputs: npt.NDArray = None
 
-    def __init__(self):
-        pass
+    def __init__(self, backend: Backend):
+        super().__init__(backend)
 
     def __call__(self, inputs: npt.NDArray) -> npt.NDArray:
         self._inputs = inputs
 
-        return xp.maximum(0, inputs)
+        return self.xp.maximum(0, inputs)
 
     def backward(self, grad: npt.NDArray) -> npt.NDArray:
-        return xp.where(self._inputs > 0, grad, 0)
+        return self.xp.where(self._inputs > 0, grad, 0)
 
 
 class Softmax(Module):
     _outputs: npt.NDArray = None
 
-    def __init__(self):
-        pass
+    def __init__(self, backend: Backend):
+        super().__init__(backend)
 
     def __call__(self, inputs: npt.NDArray) -> npt.NDArray:
-        max_logit = xp.max(inputs, axis=-1, keepdims=True)
+        max_logit = self.xp.max(inputs, axis=-1, keepdims=True)
 
-        self._outputs = xp.exp(inputs - max_logit) / xp.sum(
-            xp.exp(inputs - max_logit), axis=-1, keepdims=True
+        self._outputs = self.xp.exp(inputs - max_logit) / self.xp.sum(
+            self.xp.exp(inputs - max_logit), axis=-1, keepdims=True
         )
 
         return self._outputs
 
     def backward(self, grad: npt.NDArray) -> npt.NDArray:
-        return grad * self._outputs - self._outputs * xp.sum(
+        return grad * self._outputs - self._outputs * self.xp.sum(
             grad * self._outputs, axis=-1, keepdims=True
         )
 
 
 class PositionalEncoding(Module):
-    def __init__(self, embedding_length: int, scale=1.0):
+    def __init__(self, embedding_length: int, scale=1.0, backend: Backend = None):
+        super().__init__(backend or get_backend(Device.CPU))
         self._embedding_length = embedding_length
         self._scale = scale
 
     def __call__(self, inputs: npt.NDArray) -> npt.NDArray:
         T = inputs.shape[1]
 
-        pos = xp.arange(0, T, dtype=int)[:, xp.newaxis]
+        pos = self.xp.arange(0, T, dtype=int)[:, self.xp.newaxis]
 
         denominator = (
-            xp.arange(0, self._embedding_length) // 2 * 2
+            self.xp.arange(0, self._embedding_length) // 2 * 2
         ) / self._embedding_length
         denominator = 1 / (10_000**denominator)
-        denominator = denominator[xp.newaxis, ...]
+        denominator = denominator[self.xp.newaxis, ...]
 
         inner = pos * denominator
-        pe_sin = xp.sin(inner)
-        pe_cos = xp.cos(inner)
+        pe_sin = self.xp.sin(inner)
+        pe_cos = self.xp.cos(inner)
 
-        pe_sin[:, xp.arange(1, self._embedding_length, 2)] = 0
-        pe_cos[:, xp.arange(0, self._embedding_length, 2)] = 0
+        pe_sin[:, self.xp.arange(1, self._embedding_length, 2)] = 0
+        pe_cos[:, self.xp.arange(0, self._embedding_length, 2)] = 0
 
         positional_encoding = pe_sin + pe_cos
 
-        return inputs + positional_encoding[xp.newaxis, ...] * self._scale
+        return inputs + positional_encoding[self.xp.newaxis, ...] * self._scale
 
     def backward(self, grad: npt.NDArray) -> npt.NDArray:
         return grad
@@ -155,36 +169,51 @@ class PositionalEncoding(Module):
 class EmbeddingLayer(Module):
     _inputs: npt.NDArray = None
 
-    def __init__(self, vocab_size: int, embedding_dim: int):
+    def __init__(self, vocab_size: int, embedding_dim: int, backend: Backend = None):
+        super().__init__(backend or get_backend(Device.CPU))
         scale = 1.0 / math.sqrt(embedding_dim)
 
-        self.embeddings = Parameter(xp.random.randn(vocab_size, embedding_dim) * scale)
+        self.embeddings = Parameter(
+            self.xp.random.randn(vocab_size, embedding_dim) * scale, self.backend
+        )
 
     def __call__(self, inputs: npt.NDArray) -> npt.NDArray:
         self._inputs = inputs
         return self.embeddings.data[inputs]
 
     def backward(self, grad: npt.NDArray):
-        scatter_add(self.embeddings.grad, self._inputs, grad)
+        self.scatter_add(self.embeddings.grad, self._inputs, grad)
 
 
 class Linear(Module):
     _inputs: npt.NDArray = None
 
-    def __init__(self, in_features: int, out_features: int, include_bias=True):
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        include_bias=True,
+        backend: Backend = None,
+    ):
+        super().__init__(backend or get_backend(Device.CPU))
         limit = math.sqrt(6 / (in_features))
 
         self.weights = Parameter(
-            xp.random.uniform(-limit, limit, (in_features, out_features))
+            self.xp.random.uniform(-limit, limit, (in_features, out_features)),
+            self.backend,
         )
-        self.bias = Parameter(xp.zeros((1, out_features))) if include_bias else None
+        self.bias = (
+            Parameter(self.xp.zeros((1, out_features)), self.backend)
+            if include_bias
+            else None
+        )
 
         self.include_bias = include_bias
 
     def __call__(self, inputs: npt.NDArray) -> npt.NDArray:
         self._inputs = inputs
 
-        out = xp.matmul(inputs, self.weights.data)
+        out = self.xp.matmul(inputs, self.weights.data)
 
         if self.include_bias:
             out += self.bias.data
@@ -195,11 +224,11 @@ class Linear(Module):
         inputs_flat = self._inputs.reshape(-1, self._inputs.shape[-1])
         grad_flat = grad.reshape(-1, grad.shape[-1])
 
-        dL_dA = xp.matmul(grad, self.weights.data.T)
-        dL_dW = xp.matmul(inputs_flat.T, grad_flat)
+        dL_dA = self.xp.matmul(grad, self.weights.data.T)
+        dL_dW = self.xp.matmul(inputs_flat.T, grad_flat)
 
         if self.include_bias:
-            dL_dB = xp.sum(grad_flat, axis=0, keepdims=True)
+            dL_dB = self.xp.sum(grad_flat, axis=0, keepdims=True)
             self.bias.grad += dL_dB
 
         self.weights.grad += dL_dW
@@ -208,10 +237,17 @@ class Linear(Module):
 
 
 class FeedForwardNetwork(Module):
-    def __init__(self, in_features: int, hidden_features: int, out_features: int):
-        self.linear1 = Linear(in_features, hidden_features)
-        self.activation = ReLU()
-        self.linear2 = Linear(hidden_features, out_features)
+    def __init__(
+        self,
+        in_features: int,
+        hidden_features: int,
+        out_features: int,
+        backend: Backend = None,
+    ):
+        super().__init__(backend or get_backend(Device.CPU))
+        self.linear1 = Linear(in_features, hidden_features, backend=self.backend)
+        self.activation = ReLU(self.backend)
+        self.linear2 = Linear(hidden_features, out_features, backend=self.backend)
 
     def __call__(self, inputs: npt.NDArray) -> npt.NDArray:
         x = self.linear1(inputs)
@@ -236,21 +272,24 @@ class LayerNorm(Module):
 
     _outputs: npt.NDArray = None
 
-    def __init__(self, in_features: int):
+    def __init__(self, in_features: int, backend: Backend = None):
+        super().__init__(backend or get_backend(Device.CPU))
         self._in_features = in_features
 
-        self.gain = Parameter(xp.ones((1, in_features)))
-        self.bias = Parameter(xp.zeros((1, in_features)))
+        self.gain = Parameter(self.xp.ones((1, in_features)), self.backend)
+        self.bias = Parameter(self.xp.zeros((1, in_features)), self.backend)
 
     def __call__(self, inputs: npt.NDArray) -> npt.NDArray:
         epsilon = 1e-5
 
-        self._mean = (1 / self._in_features) * xp.sum(inputs, axis=-1, keepdims=True)
-        self._mu = inputs - self._mean
-        self._var = (1 / self._in_features) * xp.sum(
-            xp.square(self._mu), axis=-1, keepdims=True
+        self._mean = (1 / self._in_features) * self.xp.sum(
+            inputs, axis=-1, keepdims=True
         )
-        self._std = xp.sqrt(self._var + epsilon)
+        self._mu = inputs - self._mean
+        self._var = (1 / self._in_features) * self.xp.sum(
+            self.xp.square(self._mu), axis=-1, keepdims=True
+        )
+        self._std = self.xp.sqrt(self._var + epsilon)
         self._outputs = self.gain.data * (self._mu / self._std) + self.bias.data
 
         return self._outputs
@@ -266,20 +305,20 @@ class LayerNorm(Module):
 
         g = grad * self.gain.data
 
-        dL_dX = g * inv_std - xp.sum(
-            g[..., xp.newaxis]
+        dL_dX = g * inv_std - self.xp.sum(
+            g[..., self.xp.newaxis]
             / n
             * (
-                inv_std[..., xp.newaxis]
-                + self._mu[..., xp.newaxis]
-                * self._mu[..., xp.newaxis, :]
-                * inv_std3[..., xp.newaxis]
+                inv_std[..., self.xp.newaxis]
+                + self._mu[..., self.xp.newaxis]
+                * self._mu[..., self.xp.newaxis, :]
+                * inv_std3[..., self.xp.newaxis]
             ),
             axis=-2,
         )
 
-        dL_dGain = xp.sum(grad * self._mu * inv_std, axis=(0, 1))
-        dL_dB = xp.sum(grad, axis=(0, 1))
+        dL_dGain = self.xp.sum(grad * self._mu * inv_std, axis=(0, 1))
+        dL_dB = self.xp.sum(grad, axis=(0, 1))
 
         self.gain.grad += dL_dGain
         self.bias.grad += dL_dB
@@ -293,18 +332,33 @@ class MultiHeadAttention(Module):
     _values: npt.NDArray = None
     _attention_weights: npt.NDArray = None
 
-    def __init__(self, in_features: int, out_features: int, n_heads: int):
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        n_heads: int,
+        backend: Backend = None,
+    ):
+        super().__init__(backend or get_backend(Device.CPU))
         self._in_features = in_features
         self._out_features = out_features
         self._n_heads = n_heads
 
-        self.query_linear = Linear(in_features, out_features, include_bias=False)
-        self.key_linear = Linear(in_features, out_features, include_bias=False)
-        self.value_linear = Linear(in_features, out_features, include_bias=False)
+        self.query_linear = Linear(
+            in_features, out_features, include_bias=False, backend=self.backend
+        )
+        self.key_linear = Linear(
+            in_features, out_features, include_bias=False, backend=self.backend
+        )
+        self.value_linear = Linear(
+            in_features, out_features, include_bias=False, backend=self.backend
+        )
 
-        self.softmax = Softmax()
+        self.softmax = Softmax(self.backend)
 
-        self.final_projection = Linear(out_features, out_features, include_bias=False)
+        self.final_projection = Linear(
+            out_features, out_features, include_bias=False, backend=self.backend
+        )
 
     def __call__(self, inputs: npt.NDArray, mask: npt.NDArray = None) -> npt.NDArray:
         B, T, I = inputs.shape
@@ -324,24 +378,24 @@ class MultiHeadAttention(Module):
         shape = (B, T, H, Dh)
 
         # [B, T, D] -> [B, T, H, Dh]
-        queries = xp.reshape(queries, shape)
-        keys = xp.reshape(keys, shape)
-        values = xp.reshape(values, shape)
+        queries = self.xp.reshape(queries, shape)
+        keys = self.xp.reshape(keys, shape)
+        values = self.xp.reshape(values, shape)
 
         # [B, T, H, Dh] -> [B, H, T, Dh]
-        queries = xp.transpose(queries, axes=[0, 2, 1, 3])
-        keys = xp.transpose(keys, axes=[0, 2, 1, 3])
-        values = xp.transpose(values, axes=[0, 2, 1, 3])
+        queries = self.xp.transpose(queries, axes=[0, 2, 1, 3])
+        keys = self.xp.transpose(keys, axes=[0, 2, 1, 3])
+        values = self.xp.transpose(values, axes=[0, 2, 1, 3])
 
         # [B, H, T, Dh] -> [B, H, Dh, T]
-        t_keys = xp.transpose(keys, axes=[0, 1, 3, 2])
+        t_keys = self.xp.transpose(keys, axes=[0, 1, 3, 2])
 
         # [B, H, T, Dh] @ [B, H, Dh, T] -> [B, H, T, T]
         # S = Q @ K^T
-        attention_scores = xp.matmul(queries, t_keys)
+        attention_scores = self.xp.matmul(queries, t_keys)
 
         # Divide by sqrt(Dh)
-        attention_scores = attention_scores / xp.sqrt(keys.shape[-1])
+        attention_scores = attention_scores / self.xp.sqrt(keys.shape[-1])
 
         if mask is not None:
             attention_scores += mask
@@ -351,13 +405,13 @@ class MultiHeadAttention(Module):
 
         # [B, H, T, T] @ [B, H, T, Dh] -> [B, H, T, Dh]
         # O = A @ V
-        final_vector = xp.matmul(attention_weights, values)
+        final_vector = self.xp.matmul(attention_weights, values)
 
         # [B, H, T, Dh] -> [B, T, H, Dh]
-        final_vector = xp.transpose(final_vector, axes=[0, 2, 1, 3])
+        final_vector = self.xp.transpose(final_vector, axes=[0, 2, 1, 3])
 
         # [B, T, H, Dh] -> [B, T, D]
-        final_vector = xp.reshape(final_vector, [B, T, self._out_features])
+        final_vector = self.xp.reshape(final_vector, [B, T, self._out_features])
 
         # [B, T, D] @ [D, D] -> [B, T, D]
         final_vector = self.final_projection(final_vector)
@@ -383,50 +437,54 @@ class MultiHeadAttention(Module):
         shape = (B, T, H, Dh)
 
         # [B, T, D] -> [B, T, H, Dh]
-        grad = xp.reshape(grad, shape)
+        grad = self.xp.reshape(grad, shape)
 
         # [B, T, H, Dh] -> [B, H, T, Dh]
-        grad = xp.transpose(grad, axes=[0, 2, 1, 3])
+        grad = self.xp.transpose(grad, axes=[0, 2, 1, 3])
 
         # [B, H, T, T] -> [B, H, T, T]
-        t_attention_weights = xp.transpose(self._attention_weights, axes=[0, 1, 3, 2])
+        t_attention_weights = self.xp.transpose(
+            self._attention_weights, axes=[0, 1, 3, 2]
+        )
 
         # [B, H, T, T] @ [B, H, T, Dh] -> [B, H, T, Dh]
         # dL/dV = A^T @ dL/dO
-        dL_dValues = xp.matmul(t_attention_weights, grad)
+        dL_dValues = self.xp.matmul(t_attention_weights, grad)
 
         # [B, H, T, Dh] -> [B, H, Dh, T]
-        t_values = xp.transpose(self._values, axes=[0, 1, 3, 2])
+        t_values = self.xp.transpose(self._values, axes=[0, 1, 3, 2])
 
         # [B, H, T, Dh] @ [B, H, Dh, T] -> [B, H, T, T]
         # dL/dA = dL/dO @ V^T
-        dL_dAttention_Weights = xp.matmul(grad, t_values)
+        dL_dAttention_Weights = self.xp.matmul(grad, t_values)
 
         # dL/dS = softmax_backward(dL/dA) / sqrt(Dh)
-        dL_dAttention_Scores = self.softmax.backward(dL_dAttention_Weights) / xp.sqrt(
-            self._keys.shape[-1]
-        )
+        dL_dAttention_Scores = self.softmax.backward(
+            dL_dAttention_Weights
+        ) / self.xp.sqrt(self._keys.shape[-1])
 
         # [B, H, T, T] -> [B, H, T, T]
-        t_dL_dAttention_Scores = xp.transpose(dL_dAttention_Scores, axes=[0, 1, 3, 2])
+        t_dL_dAttention_Scores = self.xp.transpose(
+            dL_dAttention_Scores, axes=[0, 1, 3, 2]
+        )
 
         # [B, H, T, T] @ [B, H, T, Dh] -> [B, H, T, Dh]
         # dL/dK = dL/dS^T @ Q
-        dL_dKeys = xp.matmul(t_dL_dAttention_Scores, self._queries)
+        dL_dKeys = self.xp.matmul(t_dL_dAttention_Scores, self._queries)
 
         # [B, H, T, T] @ [B, H, T, Dh] -> [B, H, T, Dh]
         # dL/dQ = dL/dS @ K
-        dL_dQueries = xp.matmul(dL_dAttention_Scores, self._keys)
+        dL_dQueries = self.xp.matmul(dL_dAttention_Scores, self._keys)
 
         # [B, H, T, Dh] -> [B, T, H, Dh]
-        dL_dValues = xp.transpose(dL_dValues, axes=[0, 2, 1, 3])
-        dL_dKeys = xp.transpose(dL_dKeys, axes=[0, 2, 1, 3])
-        dL_dQueries = xp.transpose(dL_dQueries, axes=[0, 2, 1, 3])
+        dL_dValues = self.xp.transpose(dL_dValues, axes=[0, 2, 1, 3])
+        dL_dKeys = self.xp.transpose(dL_dKeys, axes=[0, 2, 1, 3])
+        dL_dQueries = self.xp.transpose(dL_dQueries, axes=[0, 2, 1, 3])
 
         # [B, T, H, Dh] -> [B, T, D]
-        dL_dValues = xp.reshape(dL_dValues, [B, T, self._out_features])
-        dL_dKeys = xp.reshape(dL_dKeys, [B, T, self._out_features])
-        dL_dQueries = xp.reshape(dL_dQueries, [B, T, self._out_features])
+        dL_dValues = self.xp.reshape(dL_dValues, [B, T, self._out_features])
+        dL_dKeys = self.xp.reshape(dL_dKeys, [B, T, self._out_features])
+        dL_dQueries = self.xp.reshape(dL_dQueries, [B, T, self._out_features])
 
         dL_dA_value_linear = self.value_linear.backward(dL_dValues)
         dL_dA_key_linear = self.key_linear.backward(dL_dKeys)
@@ -438,12 +496,23 @@ class MultiHeadAttention(Module):
 
 
 class TransformerBlock(Module):
-    def __init__(self, model_dim: int, n_heads: int, res_weight_init_scale=1.0):
-        self.layernorm1 = LayerNorm(model_dim)
-        self.multi_head_attention = MultiHeadAttention(model_dim, model_dim, n_heads)
+    def __init__(
+        self,
+        model_dim: int,
+        n_heads: int,
+        res_weight_init_scale=1.0,
+        backend: Backend = None,
+    ):
+        super().__init__(backend or get_backend(Device.CPU))
+        self.layernorm1 = LayerNorm(model_dim, backend=self.backend)
+        self.multi_head_attention = MultiHeadAttention(
+            model_dim, model_dim, n_heads, backend=self.backend
+        )
 
-        self.layernorm2 = LayerNorm(model_dim)
-        self.ffn = FeedForwardNetwork(model_dim, model_dim * 4, model_dim)
+        self.layernorm2 = LayerNorm(model_dim, backend=self.backend)
+        self.ffn = FeedForwardNetwork(
+            model_dim, model_dim * 4, model_dim, backend=self.backend
+        )
 
         self.ffn.linear2.weights.data *= res_weight_init_scale
         self.multi_head_attention.final_projection.weights.data *= res_weight_init_scale
@@ -471,27 +540,39 @@ class GPT(Module):
         model_dim: int,
         n_heads: int,
         positional_scale=0.1,
+        backend: Backend = None,
     ):
+        super().__init__(backend or get_backend(Device.CPU))
+
         self.vocab_size = vocab_size
         self.blocks = blocks
         self.model_dim = model_dim
         self.n_heads = n_heads
         self.positional_scale = positional_scale
 
-        self.embedding_decoder = EmbeddingLayer(vocab_size, embedding_dim=model_dim)
+        self.embedding_decoder = EmbeddingLayer(
+            vocab_size, embedding_dim=model_dim, backend=self.backend
+        )
         self.positional_encodings_decoder = PositionalEncoding(
-            embedding_length=model_dim, scale=positional_scale
+            embedding_length=model_dim,
+            scale=positional_scale,
+            backend=self.backend,
         )
 
         res_weight_init_scale = (2 * blocks) ** (-0.5)
 
         self.decoder_blocks = [
-            TransformerBlock(model_dim, n_heads, res_weight_init_scale)
+            TransformerBlock(
+                model_dim,
+                n_heads,
+                res_weight_init_scale,
+                backend=self.backend,
+            )
             for _ in range(blocks)
         ]
 
-        self.final_layernorm = LayerNorm(model_dim)
-        self.final_linear = Linear(model_dim, self.vocab_size)
+        self.final_layernorm = LayerNorm(model_dim, backend=self.backend)
+        self.final_linear = Linear(model_dim, self.vocab_size, backend=self.backend)
 
     def __call__(self, tokens: npt.NDArray, mask: npt.NDArray = None) -> npt.NDArray:
         out = self.embedding_decoder(tokens)
@@ -542,7 +623,7 @@ def assert_metadata(model: GPT, metadata: dict[str, str]):
 
 def save_model(model: GPT, path: str):
     state = {
-        name: as_numpy(parameter.data).astype(np.float32)
+        name: model.as_numpy(parameter.data).astype(np.float32)
         for name, parameter in model.named_parameters()
     }
 
@@ -559,6 +640,6 @@ def load_model(model: GPT, path: str):
 
     loaded = load_file(path)
 
-    state = {name: xp.asarray(value) for name, value in loaded.items()}
+    state = {name: model.xp.asarray(value) for name, value in loaded.items()}
 
     model.load_state_dict(state)
