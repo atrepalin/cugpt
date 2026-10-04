@@ -1,0 +1,24 @@
+[build-system]
+requires = [
+    "scikit-build-core>=0.10",
+    "nanobind>=2.4"
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "cugpt"
+version = "0.1.0"
+description = "CUDA accelerated GPT implementation"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.version = ">=3.24"
+cmake.build-type = "Release"
+wheel.py-api = ""
+wheel.packages = ["python/cugpt"]
+build.verbose = true
+
+[tool.scikit-build.cmake.define]
+CUGPT_BUILD_TESTS = "OFF"

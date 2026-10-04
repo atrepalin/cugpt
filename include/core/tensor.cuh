@@ -23,6 +23,10 @@ namespace cugpt::core
 
         void resize(const Shape &shape);
 
+        // Rebind this tensor to an externally owned device allocation
+        // No ownership is taken and no allocation/copy is performed
+        void view(const Shape &shape, T *data);
+
         const Shape &shape() const noexcept { return shape_; }
         std::size_t numel() const noexcept { return numel_; }
         std::size_t bytes() const noexcept { return numel_ * sizeof(T); }
@@ -44,12 +48,27 @@ namespace cugpt::core
     {
         const auto n = checkedNumel(shape);
         shape_ = shape;
-        if (numel_ == n)
+        if (numel_ == n && buffer_.owns())
         {
             return;
         }
         numel_ = n;
         buffer_.allocate(bytes());
+    }
+
+    template <typename T>
+    void AbstractTensor<T>::view(const Shape &shape, T *data)
+    {
+        const auto n = checkedNumel(shape);
+        const auto bytes = n * sizeof(T);
+        if (bytes != 0 && data == nullptr)
+        {
+            throw std::invalid_argument("Tensor view data is null for non-empty tensor");
+        }
+
+        shape_ = shape;
+        numel_ = n;
+        buffer_.view(static_cast<void *>(data), bytes);
     }
 
     template <typename T>
