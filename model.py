@@ -3,10 +3,10 @@ from typing import Generator
 
 import numpy as np
 import numpy.typing as npt
-
-from backend import Backend, Device, get_backend
 from safetensors import safe_open
 from safetensors.numpy import load_file, save_file
+
+from backend import Backend, Device, get_backend
 
 
 class Parameter:
