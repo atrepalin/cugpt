@@ -17,7 +17,7 @@ license = { text = "MIT" }
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
-cmake.version = ">=3.24"
+cmake.version = ">=4.4"
 cmake.build-type = "Release"
 wheel.py-api = ""
 wheel.packages = ["python/cugpt"]
