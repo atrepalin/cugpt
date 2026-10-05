@@ -1,4 +1,9 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 4.4)
+
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures")
+endif()
+
 project(cugpt VERSION 0.1.0 LANGUAGES CXX CUDA)
 include(GNUInstallDirs)
 
@@ -33,6 +38,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/syoyo/safetensors-cpp
     GIT_TAG main
     GIT_SHALLOW TRUE
+    SOURCE_SUBDIR .cmake-ignore
 )
 
 FetchContent_Declare(
@@ -43,8 +49,7 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(nanobind)
-
-FetchContent_GetProperties(safetensors_cpp)
+FetchContent_MakeAvailable(safetensors_cpp)
 
 if(NOT safetensors_cpp_POPULATED)
     FetchContent_Populate(safetensors_cpp)
