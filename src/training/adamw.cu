@@ -45,12 +45,11 @@ namespace cugpt::training
             const float m_hat = new_m * inv_beta1_correction;
             const float v_hat = new_v * inv_beta2_correction;
 
-            // First the adaptive update, then decoupled weight decay on the updated value
             float value = parameter[idx];
             value -= learning_rate * m_hat / (sqrtf(v_hat) + eps);
             if (weight_decay != 0.0f)
             {
-                value -= learning_rate * weight_decay * value;
+                value -= learning_rate * weight_decay * parameter[idx];
             }
             parameter[idx] = value;
         }
