@@ -371,7 +371,7 @@ namespace
         dataset_config.seed = args.seed;
         const MathDataset dataset = MathDataset::generate(dataset_config);
 
-        GPT model = makeModel(ctx, dataset.sequenceLength());
+        GPT model = makeModel(ctx, dataset.tokenizer().vocabularySize());
         CrossEntropyLoss loss(ctx, dataset.tokenizer().padId());
         AdamW optimizer(
             ctx,
