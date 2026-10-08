@@ -304,8 +304,8 @@ Each block is pre-normalized and has two residual branches:
 
 $$
 \begin{aligned}
-r_1 &= x+\operatorname{Attention}(\operatorname{LayerNorm}(x)),\\
-y   &= r_1+\operatorname{FFN}(\operatorname{LayerNorm}(r_1)).
+r_1 &= x+\mathop{\text{Attention}}(\mathop{\text{LayerNorm}}(x)),\\
+y   &= r_1+\mathop{\text{FFN}}(\mathop{\text{LayerNorm}}(r_1)).
 \end{aligned}
 $$
 
@@ -337,10 +337,10 @@ LayerNorm uses:
 
 $$
 \begin{aligned}
-\mu &= \operatorname{mean}(x),\\
-\sigma^2 &= \operatorname{mean}\!\left((x-\mu)^2\right),\\
-\operatorname{inv\_std} &= \frac{1}{\sqrt{\sigma^2+10^{-5}}},\\
-y &= \gamma\odot(x-\mu)\operatorname{inv\_std}+\beta.
+\mu &= \mathop{\text{mean}}(x),\\
+\sigma^2 &= \mathop{\text{mean}}\!\left((x-\mu)^2\right),\\
+\mathop{\text{inv\_std}} &= \frac{1}{\sqrt{\sigma^2+10^{-5}}},\\
+y &= \gamma\odot(x-\mu)\mathop{\text{inv\_std}}+\beta.
 \end{aligned}
 $$
 
@@ -354,7 +354,7 @@ $$
 Q=XW_Q,\qquad K=XW_K,\qquad V=XW_V,
 $$
 $$
-O=\operatorname{Attention}(Q,K,V)W_O.
+O=\mathop{\text{Attention}}(Q,K,V)W_O.
 $$
 
 The projections are reshaped into:
@@ -1114,7 +1114,7 @@ Generation is purely greedy:
 1. encode the prompt,
 2. run the full model,
 3. read the logits for the last position,
-4. choose $\operatorname{arg\,max}(\mathrm{logits}[-1])$,
+4. choose $\mathop{\text{arg\,max}}(\mathrm{logits}[-1])$,
 5. append the token,
 6. stop on `<end>` or after `max_new_tokens` steps.
 
