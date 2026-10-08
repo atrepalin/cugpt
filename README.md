@@ -338,7 +338,7 @@ LayerNorm uses:
 $$
 \begin{aligned}
 \mu &= \mathop{\text{mean}}(x),\\
-\sigma^2 &= \mathop{\text{mean}}\!\left((x-\mu)^2\right),\\
+\sigma^2 &= \mathop{\text{mean}}\left((x-\mu)^2\right),\\
 \mathop{\text{inv\\_std}} &= \frac{1}{\sqrt{\sigma^2+10^{-5}}},\\
 y &= \gamma\odot(x-\mu)\mathop{\text{inv\\_std}}+\beta.
 \end{aligned}
@@ -1114,15 +1114,11 @@ Generation is purely greedy:
 1. encode the prompt,
 2. run the full model,
 3. read the logits for the last position,
-4. choose $\mathop{\text{arg\,max}}(\mathrm{logits}[-1])$,
+4. choose $\mathop{\text{argmax}}(\mathrm{logits}[-1])$,
 5. append the token,
 6. stop on `<end>` or after `max_new_tokens` steps.
 
 There is no temperature, top-k, top-p, beam search, repetition penalty, or sampling implementation in the current inference code.
-
-### Inference seed
-
-The CLI parser accepts an inference seed field internally, but the current inference path does not use a random seed because decoding is deterministic greedy argmax.
 
 ---
 
