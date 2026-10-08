@@ -339,8 +339,8 @@ $$
 \begin{aligned}
 \mu &= \mathop{\text{mean}}(x),\\
 \sigma^2 &= \mathop{\text{mean}}\!\left((x-\mu)^2\right),\\
-\mathop{\text{inv\_std}} &= \frac{1}{\sqrt{\sigma^2+10^{-5}}},\\
-y &= \gamma\odot(x-\mu)\mathop{\text{inv\_std}}+\beta.
+\mathop{\text{inv\\_std}} &= \frac{1}{\sqrt{\sigma^2+10^{-5}}},\\
+y &= \gamma\odot(x-\mu)\mathop{\text{inv\\_std}}+\beta.
 \end{aligned}
 $$
 
